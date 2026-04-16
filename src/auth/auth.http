@@ -1,0 +1,35 @@
+post http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+     "username": "moysiadis_george",
+    "password": "georgemois23"
+}
+
+### 
+
+GET http://localhost:3000/auth/me
+authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmNDMxNDE4My0xYTgwLTQzYTEtYjA0Mi04ZTU2ODYzZGIwZDkiLCJ1c2VybmFtZSI6Im1veXNpYWRpc19nZW9yZ2UiLCJpYXQiOjE3NjAyNjU2MDIsImV4cCI6MTc2MDI3NjQwMn0.GPKfIOu9l2ysilmiDeaW9BJ570dFZomjV2s1MrPPK-M  
+
+###
+
+post http://localhost:3000/auth-v2/login
+Content-Type: application/json
+
+{
+     "username": "moysiadis_george",
+    "password": "georgemois23"
+}
+
+
+### 
+post http://localhost:3000/auth/signup
+Content-Type: application/json
+
+{
+    "username": "moysiadis_george",
+    "password": "georgemois23",
+    "email": "georgemois23@gmail.com",
+    "first_name": "George",
+    "last_name": 
+}
