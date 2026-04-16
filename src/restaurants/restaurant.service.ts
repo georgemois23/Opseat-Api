@@ -165,45 +165,59 @@ export class RestaurantService {
          return restaurants;
      }
 
-     async createRestaurant(restaurantData: CreateRestaurantDto, user: User) {
+    async createRestaurant(restaurantData: CreateRestaurantDto, user: User) {
   const { name, schedules, ...otherData } = restaurantData;
 
   return await this.restaurantRepo.manager.transaction(async (transactionalManager) => {
-    
-    // 1. Create the restaurant instance first
-    const restaurant = transactionalManager.create(Restaurant, {
+    console.log('--- STARTING TRANSACTION ---');
+
+    // 1. Create and Save the Restaurant FIRST (with no schedules attached)
+    const restaurantEntity = transactionalManager.create(Restaurant, {
       ...otherData,
       name,
     });
+    
+    // This will generate the ID and the publicId
+    const savedRestaurant = await transactionalManager.save(restaurantEntity);
+    console.log('1. Restaurant saved. ID:', savedRestaurant.id);
 
-    // 2. If schedules exist, map them to the restaurant instance
+    // 2. Now that we have the ID, save the schedules separately
     if (schedules && schedules.length > 0) {
-      restaurant.schedules = schedules.map((s) => {
+      const scheduleEntities = schedules.map((s) => {
         return transactionalManager.create(RestaurantSchedule, {
-          ...s,
-          restaurant: restaurant, // Link the reference
+          dayOfWeek: s.dayOfWeek,
+          openTime: s.openTime,
+          closeTime: s.closeTime,
+          isClosed: s.isClosed,
+          // Link using ONLY the ID we just got from the database
+          restaurant: { id: savedRestaurant.id } as Restaurant,
         });
       });
+
+      // Save the schedules directly to their own table
+      await transactionalManager.save(RestaurantSchedule, scheduleEntities);
+      console.log('2. Schedules saved separately');
+      
+      // Attach them to the object in memory just for the return response
+      savedRestaurant.schedules = scheduleEntities;
     }
 
-    // 3. Save (TypeORM will save the Restaurant, get the ID, and then save schedules with that ID)
-    const savedRestaurant = await transactionalManager.save(restaurant);
-    const slug = `${savedRestaurant.name
-  .toLowerCase()
-  .trim()
-  .replace(/\s+/g, '-')}-${savedRestaurant.publicId}`;
-  savedRestaurant.slug = slug;
-  await transactionalManager.save(savedRestaurant);
+    // 3. Handle the Slug (Now we definitely have the publicId)
+    const slug = `${savedRestaurant.name.toLowerCase().trim().replace(/\s+/g, '-')}-${savedRestaurant.publicId}`;
+    await transactionalManager.update(Restaurant, savedRestaurant.id, { slug });
+    savedRestaurant.slug = slug;
+    console.log('3. Slug updated:', slug);
 
-    // 4. Create and save the Owner link
+    // 4. Create the Owner link
     const restaurantUser = transactionalManager.create(RestaurantUser, {
       user,
-      restaurant: savedRestaurant,
+      restaurant: { id: savedRestaurant.id } as Restaurant,
       role: RestaurantRole.OWNER,
     });
     await transactionalManager.save(restaurantUser);
+    console.log('4. Owner link saved');
 
-    // 5. Clean up circular refs for the response
+    // 5. Cleanup for response
     if (savedRestaurant.schedules) {
       savedRestaurant.schedules.forEach((s) => delete (s as any).restaurant);
     }
