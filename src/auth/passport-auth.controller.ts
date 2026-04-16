@@ -83,7 +83,7 @@ async googleAuthRedirect(@Req() req, @Res() res: Response) {
   });
 
   // 3. Redirect the user back to your frontend
-  return res.redirect('http://localhost:3000/home'); 
+  return res.redirect(`${process.env.FRONTEND_URL}/home`); 
 }
     
    @Get('me')
