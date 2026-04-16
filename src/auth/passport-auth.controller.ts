@@ -100,7 +100,7 @@ async getUserInfo(@Request() request) {
     isRestaurantUser: !!isRestaurantUser,
   };
 }
-
+    @Public()
     @Post('signup')
     async signup(
         @Body() input: {
