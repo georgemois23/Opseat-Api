@@ -10,6 +10,13 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Roles(UserRole.ADMIN)
+  @UseGuards(AuthGuard)
+  @Get('admin')
+  async findAll() {
+    return this.usersService.findAll();
+  }
+
   @Patch(':id')
 async updateUser(
   @Param('id') id: string,

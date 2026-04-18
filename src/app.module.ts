@@ -20,6 +20,7 @@ import { AuthGuard } from './auth/guards/auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { MenuModule } from './restaurants/menu/menu.module';
 import { OrderModule } from './order/order.module';
+import { RestaurantUserModule } from './restaurant-user/restaurantUser.module';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -52,6 +53,7 @@ const isProduction = process.env.NODE_ENV === 'production';
     AuthModule, 
     UserAddressModule,
     RestaurantModule,
+    RestaurantUserModule,
     GeolocationModule,
     MenuModule,
     OrderModule,

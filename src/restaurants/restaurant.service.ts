@@ -5,7 +5,7 @@ import { GreekRestaurantCategory, Restaurant } from "./entities/restaurant.entit
 import { Brackets, IsNull, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { CreateRestaurantDto } from "./dto/create-restaurant.dto";
-import { RestaurantRole, RestaurantUser } from "src/restaurant-user/entities/restaurantUser.entity";
+import { ApplicationStatus, RestaurantRole, RestaurantUser } from "src/restaurant-user/entities/restaurantUser.entity";
 import { nanoid } from "nanoid";
 import { RestaurantSchedule } from "./restaurant-schedule/restaurant-schedule.entity";
 import { numericId } from "src/lib/nanoid";
@@ -209,13 +209,25 @@ export class RestaurantService {
     console.log('3. Slug updated:', slug);
 
     // 4. Create the Owner link
-    const restaurantUser = transactionalManager.create(RestaurantUser, {
-      user,
-      restaurant: { id: savedRestaurant.id } as Restaurant,
-      role: RestaurantRole.OWNER,
-    });
-    await transactionalManager.save(restaurantUser);
-    console.log('4. Owner link saved');
+    const existingRestaurantUser = await transactionalManager.findOne(RestaurantUser, {
+  where: { 
+    user: { id: user.id }, 
+    role: RestaurantRole.OWNER,
+    applicationStatus: ApplicationStatus.APPROVED, // Change this to APPROVED
+    restaurant: IsNull(), // Only pick the one that isn't linked yet
+  }
+});
+
+if (!existingRestaurantUser) {
+  throw new Error('No approved partnership found for this user, or restaurant already linked.');
+}
+
+// Link the existing record to the new restaurant
+await transactionalManager.update(RestaurantUser, existingRestaurantUser.id, {
+  restaurant: { id: savedRestaurant.id } as Restaurant,
+});
+
+console.log('4. Existing Owner record linked to new restaurant');
 
     // 5. Cleanup for response
     if (savedRestaurant.schedules) {

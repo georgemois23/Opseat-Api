@@ -1,6 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne, Column } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, UpdateDateColumn, DeleteDateColumn, CreateDateColumn } from "typeorm";
 import { Restaurant } from "../../restaurants/entities/restaurant.entity";
 import { User } from "../../users/entities/users.entity";
+
+export enum ApplicationStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected'
+}
 
 export enum RestaurantRole {
   OWNER = 'owner',
@@ -21,4 +27,16 @@ export class RestaurantUser {
 
   @Column({ type: 'enum', enum: RestaurantRole })
   role: RestaurantRole;
+
+  @Column({ type: 'enum', enum: ApplicationStatus, default: ApplicationStatus.PENDING })
+  applicationStatus: ApplicationStatus;
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+    createdAt: Date;
+  
+    @DeleteDateColumn({type: 'timestamptz', nullable: true })
+    deletedAt?: Date;  
+
+  @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+  updatedAt: Date;  
 }
