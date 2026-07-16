@@ -17,7 +17,7 @@ export class UsersService {
   ) {}
 
   async findUserByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email },select: ['id', 'email', "password"] });
+    return this.userRepository.findOne({ where: { email },select: ['id', 'email', "password", "disabled"] });
   }
 
   
@@ -26,9 +26,31 @@ export class UsersService {
     return this.userRepository.findOne({ where: { id } });
   }
 
+  /**
+   * How the account signs in: 'Google' for accounts created via Google Sign-In
+   * (they have no password), 'Auth' for email/password accounts. The `password`
+   * column is `select: false`, so it must be requested explicitly here.
+   */
+  async getLoginProvider(id: string): Promise<'Google' | 'Auth'> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      select: ['id', 'password'],
+    });
+    return user?.password ? 'Auth' : 'Google';
+  }
+
   // Get all users
   async findAll(): Promise<User[]> {
     return this.userRepository.find();
+  }
+
+  async findForAdmin(id: string): Promise<User | null> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      // relations: ['orders',]
+    });
+    if (!user) return null;
+    return user;
   }
 
   async findOne(email: string): Promise<User | null> {

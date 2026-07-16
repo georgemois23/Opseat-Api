@@ -9,9 +9,10 @@ import { RestaurantService } from './restaurant.service';
 import { Restaurant } from './entities/restaurant.entity';
 import { RestaurantUser } from 'src/restaurant-user/entities/restaurantUser.entity';
 import { RestaurantSchedule } from './restaurant-schedule/restaurant-schedule.entity';
+import { Order } from 'src/order/entities/order.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Restaurant, RestaurantUser, UserAddress, RestaurantSchedule]),UsersModule,],
+  imports: [TypeOrmModule.forFeature([User, Restaurant, RestaurantUser, UserAddress, RestaurantSchedule, Order]),UsersModule,],
   controllers: [RestaurantController],
   providers: [RestaurantService],
   exports: [RestaurantService],

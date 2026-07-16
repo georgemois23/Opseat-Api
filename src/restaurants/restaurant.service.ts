@@ -2,18 +2,22 @@ import { UserAddress } from 'src/users/userAddress/entities/UserAddress.entity';
 import { Injectable } from "@nestjs/common";
 import { User } from "src/users/entities/users.entity";
 import { GreekRestaurantCategory, Restaurant } from "./entities/restaurant.entity";
-import { Brackets, IsNull, Repository } from "typeorm";
+import { Brackets, IsNull, Not, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { CreateRestaurantDto } from "./dto/create-restaurant.dto";
-import { ApplicationStatus, RestaurantRole, RestaurantUser } from "src/restaurant-user/entities/restaurantUser.entity";
+import { RestaurantRole, RestaurantUser } from "src/restaurant-user/entities/restaurantUser.entity";
 import { nanoid } from "nanoid";
 import { RestaurantSchedule } from "./restaurant-schedule/restaurant-schedule.entity";
 import { numericId } from "src/lib/nanoid";
+import { Order, OrderStatus } from 'src/order/entities/order.entity';
+import { stat } from 'fs';
+import { ApplicationStatus } from '../common/enums/application-status.enum';
 @Injectable()
 export class RestaurantService {
     constructor(
         @InjectRepository(Restaurant) private restaurantRepo: Repository<Restaurant>,
-        @InjectRepository(RestaurantUser) private restaurantUserRepo: Repository<RestaurantUser>
+        @InjectRepository(RestaurantUser) private restaurantUserRepo: Repository<RestaurantUser>,
+        @InjectRepository(Order) private orderRepo: Repository<Order>
         
     ) {}
 
@@ -37,9 +41,20 @@ export class RestaurantService {
       restaurant: { id: restaurantId },
     },
   });
-  
+
   return count > 0;
 }
+
+    /** User ids of everyone linked to a restaurant (owner/manager/staff) — used to push realtime order events. */
+    async getRestaurantStaffUserIds(restaurantId: string): Promise<string[]> {
+      const links = await this.restaurantUserRepo.find({
+        where: { restaurant: { id: restaurantId } },
+        relations: ['user'],
+      });
+      return links
+        .map((link) => link.user?.id)
+        .filter((id): id is string => typeof id === 'string');
+    }
 
     async fillPublicIds() {
     // Use IsNull() instead of null
@@ -70,6 +85,32 @@ export class RestaurantService {
     async getAllRestaurants(): Promise<Restaurant[]> {
       return this.restaurantRepo.find();
     }
+
+      async findByIdForAdmin(restaurantId: string): Promise<any> {
+        const restaurant = await this.restaurantRepo.findOne({
+          where: { id: restaurantId },
+          relations: ['schedules', 'staff', 'staff.user']
+        });
+
+      const orders = await this.orderRepo.find({
+        where: {
+          restaurant: { id: restaurantId },
+          status: Not(OrderStatus.DRAFT),
+        },
+        relations: ['customer', 'items'],
+      });
+        
+        const totalOrders = orders.length;
+        const totalRevenue = orders.reduce((sum, order) => sum + parseFloat(order.totalPrice.toString()), 0);
+
+        return {
+          ...restaurant,
+          orders:orders,
+          totalOrders,
+          totalRevenue
+        };
+
+      }
 
     async globalSearch(latitude: number, longitude: number, q: string) {
   const now = new Date();

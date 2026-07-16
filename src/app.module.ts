@@ -21,6 +21,8 @@ import { RolesGuard } from './auth/guards/roles.guard';
 import { MenuModule } from './restaurants/menu/menu.module';
 import { OrderModule } from './order/order.module';
 import { RestaurantUserModule } from './restaurant-user/restaurantUser.module';
+import { CourierModule } from './couriers/courier.module';
+import { SocketModule } from './socket/socket.module';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -57,6 +59,8 @@ const isProduction = process.env.NODE_ENV === 'production';
     GeolocationModule,
     MenuModule,
     OrderModule,
+    CourierModule,
+    SocketModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

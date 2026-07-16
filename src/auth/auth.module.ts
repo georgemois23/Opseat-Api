@@ -13,6 +13,7 @@ import { User } from '../users/entities/users.entity';
 import { UsersService } from 'src/users/users.service';
 import { RestaurantUser } from 'src/restaurant-user/entities/restaurantUser.entity';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { Courier } from 'src/couriers/entities/courier.entity';
 
 @Module({
   providers: [AuthService, LocalStrategy, GoogleStrategy],
@@ -26,7 +27,8 @@ import { GoogleStrategy } from './strategies/google.strategy';
     PassportModule,
     
     // EmailModule,
-    TypeOrmModule.forFeature([User,RestaurantUser]),
+    TypeOrmModule.forFeature([User,RestaurantUser, Courier]),
   ],
+  exports: [JwtModule]
 })
 export class AuthModule {}

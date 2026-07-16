@@ -1,12 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, UpdateDateColumn, DeleteDateColumn, CreateDateColumn } from "typeorm";
 import { Restaurant } from "../../restaurants/entities/restaurant.entity";
 import { User } from "../../users/entities/users.entity";
+import { ApplicationStatus } from "../../common/enums/application-status.enum";
 
-export enum ApplicationStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  REJECTED = 'rejected'
-}
+
 
 export enum RestaurantRole {
   OWNER = 'owner',

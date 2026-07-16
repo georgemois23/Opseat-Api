@@ -1,16 +1,25 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { OrderService } from "./order.service";
 import { CurrentUser } from "src/auth/guards/current-user.decorator";
-import { User } from "src/users/entities/users.entity";
+import { User, UserRole } from "src/users/entities/users.entity";
 import { UpdateOrderDto } from "./dto/UpdateOrder.dto";
 import { AddItemDto, UpdateItemDto } from "./dto/UpdateItem.dto";
 import { UpdateOrderAddressDto } from "./dto/SubmitOrder.dto";
+import { Roles } from "src/auth/guards/roles.decorator";
+import { AuthGuard } from "src/auth/guards/auth.guard";
 
 @Controller('order')
 export class OrderController {
  constructor(private readonly OrderService: OrderService) {}
 
+    @Roles(UserRole.ADMIN)
+//   @UseGuards(AuthGuard)
+  @Get('admin/:userId')
+  async getOrdersForAdmin(@Param('userId') userId: string) {
+    return this.OrderService.getOrdersForAdmin(userId);
+  }
 
+    
  @Get('my')
     async getMyOrders(@CurrentUser() user: User) {  
         return this.OrderService.getMyOrders(user);

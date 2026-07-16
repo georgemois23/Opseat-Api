@@ -1,15 +1,17 @@
+import { CourierService } from './../couriers/courier.service';
 import { AddItemDto } from './dto/UpdateItem.dto';
 import { UpdateOrderDto } from './dto/UpdateOrder.dto';
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { RestaurantService } from "src/restaurants/restaurant.service";
 import { User } from "src/users/entities/users.entity";
-import { DataSource, IsNull, Repository } from "typeorm";
+import { DataSource, IsNull, Not, Repository } from "typeorm";
 import { DeliveryType, Order, OrderStatus } from "./entities/order.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { OrderItemIngredient } from './entities/orderItemIngredient.entity';
 import { OrderItem } from './entities/orderItem.entity';
 import { UpdateOrderAddressDto } from './dto/SubmitOrder.dto';
 import { MenuItem } from 'src/restaurants/menu/entities/menuItem.entity';
+import { SocketGateway } from 'src/socket/socket.gateway';
 
 @Injectable()
 export class OrderService {
@@ -19,7 +21,59 @@ export class OrderService {
             @InjectRepository(MenuItem) private readonly menuItemRepo: Repository<MenuItem>,
             private readonly dataSource: DataSource,
             private readonly restaurantService: RestaurantService,
+            private readonly courierService: CourierService,
+            private readonly socketGateway: SocketGateway,
         ) {}
+
+    /** Push an event to every user linked to a restaurant (order board sync across devices). */
+    private async emitToRestaurantStaff(restaurantId: string, event: string, data: any) {
+        if (!restaurantId) return;
+        const staffIds = await this.restaurantService.getRestaurantStaffUserIds(restaurantId);
+        staffIds.forEach((id) => this.socketGateway.sendToUser(id, event, data));
+    }
+
+    /**
+     * Notify everyone tracking a status change: the customer, the restaurant staff (live board),
+     * and the assigned courier (if any). Expects `restaurant`, `customer`, and — when a courier is
+     * assigned — `courier` + `courier.user` relations loaded.
+     *
+     * When the order reaches a terminal state, the assigned courier is freed for new deliveries.
+     */
+    private async emitOrderStatusChanged(order: Order) {
+        const payload = {
+            orderId: order.id,
+            status: order.status,
+            estimatedDeliveryTime: order.estimatedDeliveryTime ?? null,
+        };
+        if (order.customer?.id) {
+            this.socketGateway.sendToUser(order.customer.id, 'order_status_changed', payload);
+        }
+        if (order.restaurant?.id) {
+            await this.emitToRestaurantStaff(order.restaurant.id, 'order_status_changed', payload);
+        }
+        if (order.courier?.user?.id) {
+            this.socketGateway.sendToUser(order.courier.user.id, 'order_status_changed', payload);
+        }
+
+        // Free the courier once the order is done so they can take new deliveries.
+        const isTerminal =
+            order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED;
+        if (isTerminal && order.courier?.id) {
+            await this.courierService.releaseCourier(order.courier.id);
+        }
+    }
+
+    /** Great-circle distance between two lat/lng points, in kilometers (Haversine). */
+    private haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+        const R = 6371; // Earth radius in km
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLng = toRad(lng2 - lng1);
+        const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(a));
+    }
 
     private async recalculateOrderTotal(orderId: string) {
     const order = await this.orderRepo.findOne({
@@ -35,6 +89,17 @@ export class OrderService {
     order.totalPrice = Math.round(total * 100) / 100;
     return this.orderRepo.save(order);
 }
+
+    
+    async getOrdersForAdmin(userId: string) {
+        const orders = await this.orderRepo.find({
+            where: { customer: { id: userId }, status: Not(OrderStatus.DRAFT), } ,
+            
+            relations: ['restaurant', 'items', 'items.menuItem', 'items.ingredients', 'items.ingredients.ingredient']
+        });
+        if (!orders) throw new NotFoundException('No orders found for this user');
+        return orders;
+    }
 
     async getMyOrders(user: User) { 
         return this.orderRepo.find({
@@ -101,7 +166,7 @@ export class OrderService {
     async submitOrder(orderId: string, user: User, addressDto: UpdateOrderAddressDto, ) {
         const order = await this.orderRepo.findOne({
             where: { id: orderId, customer: { id: user.id }, status: OrderStatus.DRAFT },
-            relations: ['items', 'items.menuItem', 'items.ingredients']
+            relations: ['items', 'items.menuItem', 'items.ingredients', 'restaurant', 'customer']
         });
         if (!order) throw new Error('Order not found or already submitted');
         order.status = OrderStatus.PENDING;
@@ -111,22 +176,63 @@ export class OrderService {
             if (!addressDto.deliveryAddress || !addressDto.deliveryLat || !addressDto.deliveryLng) {
                 throw new Error('Delivery address and coordinates are required for delivery orders');
             }
+
+            // Reject delivery addresses that fall outside the restaurant's delivery radius.
+            const restLat = Number(order.restaurant?.latitude);
+            const restLng = Number(order.restaurant?.longitude);
+            const radiusKm = Number(order.restaurant?.deliveryRadius);
+            if (
+                Number.isFinite(restLat) &&
+                Number.isFinite(restLng) &&
+                Number.isFinite(radiusKm) &&
+                radiusKm > 0
+            ) {
+                const distanceKm = this.haversineKm(
+                    restLat,
+                    restLng,
+                    Number(addressDto.deliveryLat),
+                    Number(addressDto.deliveryLng),
+                );
+                if (distanceKm > radiusKm) {
+                    throw new BadRequestException(
+                        `Delivery address is outside this restaurant's delivery area ` +
+                            `(${distanceKm.toFixed(1)} km away, limit ${radiusKm} km).`,
+                    );
+                }
+            }
+
         order.deliveryAddress = addressDto.deliveryAddress;
         order.deliveryLat = addressDto.deliveryLat;
         order.deliveryLng = addressDto.deliveryLng;
         order.deliveryNotes = addressDto.deliveryNotes ? addressDto.deliveryNotes : '';
         }
 
-        return this.orderRepo.save(order);
+        const savedOrder = await this.orderRepo.save(order);
+
+        // Checkout complete: push the new order to the restaurant's live board.
+        await this.emitToRestaurantStaff(order.restaurant?.id, 'new_order', {
+            orderId: savedOrder.id,
+            status: savedOrder.status,
+            restaurantId: order.restaurant?.id ?? null,
+            totalPrice: savedOrder.totalPrice,
+            deliveryType: savedOrder.deliveryType,
+            placedAt: savedOrder.placedAt,
+            itemCount: order.items?.length ?? 0,
+        });
+
+        return savedOrder;
     }
 
     async cancelOrder(orderId: string, user: User) {
         const order = await this.orderRepo.findOne({
             where: { id: orderId, customer: { id: user.id }, status: OrderStatus.PENDING },
+            relations: ['restaurant', 'customer', 'courier', 'courier.user'],
         });
         if (!order) throw new Error('Order not found or cannot be cancelled');
         order.status = OrderStatus.CANCELLED;
-        return this.orderRepo.save(order);
+        const savedOrder = await this.orderRepo.save(order);
+        await this.emitOrderStatusChanged(savedOrder);
+        return savedOrder;
     }
 
     async acceptOrder(orderId: string, user: User) {
@@ -140,7 +246,9 @@ export class OrderService {
         if (!isLinked) throw new Error('Access denied');
         order.status = OrderStatus.ACCEPTED;
         order.estimatedDeliveryTime = new Date(Date.now() + 30 * 60 * 1000); // Example: set to 30 minutes from now
-        return this.orderRepo.save(order);
+        const savedOrder = await this.orderRepo.save(order);
+        await this.emitOrderStatusChanged(savedOrder);
+        return savedOrder;
     }
 
    async updateOrder(orderId: string, updateOrderDto: UpdateOrderDto, user: User) {
@@ -313,19 +421,46 @@ async removeItem(orderItemId: string, user: User) {
         });
     }
 
-    async updateOrderStatus(orderId: string, status: string, user: User) {
+    async markAsReady(orderId: string, user: User) {
         const order = await this.orderRepo.findOne({
             where: { id: orderId },
             relations: ['restaurant', 'customer']
         });
+        if (!order) throw new Error('Order not found or cannot be marked as ready');
+        const isLinked = await this.restaurantService.isUserLinkedToRestaurant(user.id, order.restaurant.id);
+        if (!isLinked) throw new Error('Access denied');
+
+
+        order.status = OrderStatus.READY;
+        const readyOrder = await this.orderRepo.save(order);
+
+        await this.emitOrderStatusChanged(readyOrder);
+
+        const courier = await this.courierService.findCourierForDelivery(readyOrder);
+
+        console.log('Found courier:', courier);
+
+        return readyOrder;
+    }
+
+    async updateOrderStatus(orderId: string, status: string, user: User) {
+        const order = await this.orderRepo.findOne({
+            where: { id: orderId },
+            relations: ['restaurant', 'customer', 'courier', 'courier.user']
+        });
         if (status === OrderStatus.ACCEPTED) {
             return this.acceptOrder(orderId, user);
+        }
+        if (status === OrderStatus.READY) {
+            return this.markAsReady(orderId, user);
         }
         if (!order) throw new Error('Order not found');
         const isLinked = await this.restaurantService.isUserLinkedToRestaurant(user.id, order.restaurant.id);
         if (!isLinked) throw new Error('Access denied');
         order.status = status as OrderStatus;
-        return this.orderRepo.save(order);
+        const savedOrder = await this.orderRepo.save(order);
+        await this.emitOrderStatusChanged(savedOrder);
+        return savedOrder;
     }
 
 }

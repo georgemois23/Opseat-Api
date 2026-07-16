@@ -1,9 +1,10 @@
 import { Restaurant } from 'src/restaurants/entities/restaurant.entity';
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from '@nestjs/typeorm';
-import { ApplicationStatus, RestaurantRole, RestaurantUser } from './entities/restaurantUser.entity';
+import { RestaurantRole, RestaurantUser } from './entities/restaurantUser.entity';
 import { Repository } from 'typeorm';
 import { User } from 'src/users/entities/users.entity';
+import { ApplicationStatus } from '../common/enums/application-status.enum';
 
 @Injectable()
 export class RestaurantUserService {

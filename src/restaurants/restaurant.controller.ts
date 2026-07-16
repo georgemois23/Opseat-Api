@@ -28,6 +28,14 @@ export class RestaurantController {
     async getAllRestaurants() {
         return this.restaurantService.getAllRestaurants();
     }
+
+    @UseGuards(AuthGuard)
+    @Roles(UserRole.ADMIN)
+    @Get('admin/:restaurantId')
+    async getRestaurantByIdForAdmin(@Param('restaurantId') restaurantId: string) {
+        return this.restaurantService.findByIdForAdmin(restaurantId);
+    }
+
     @UseGuards(AuthGuard)
     @Roles(UserRole.ADMIN)
     @Get('backfill')

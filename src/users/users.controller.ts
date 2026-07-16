@@ -17,6 +17,13 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Roles(UserRole.ADMIN)
+  @UseGuards(AuthGuard)
+  @Get('admin/:id')
+  async findForAdmin(@Param('id') id: string) {
+    return this.usersService.findForAdmin(id);
+  }
+
   @Patch(':id')
 async updateUser(
   @Param('id') id: string,

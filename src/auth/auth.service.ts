@@ -1,4 +1,4 @@
-import { ConflictException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service'
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -192,6 +192,67 @@ async verifyResetToken(token: string) {
     return { message: 'Token is valid' };
   }
 
+
+  /** Update the signed-in user's own profile. Only whitelisted fields; guards email uniqueness. */
+  async updateProfile(
+    userId: string,
+    data: { first_name?: string; last_name?: string; email?: string },
+  ) {
+    const patch: { first_name?: string; last_name?: string; email?: string } = {};
+    if (typeof data.first_name === 'string') patch.first_name = data.first_name.trim();
+    if (typeof data.last_name === 'string') patch.last_name = data.last_name.trim();
+    if (typeof data.email === 'string') patch.email = data.email.trim();
+
+    if (patch.email) {
+      const existing = await this.usersService.findUserByEmail(patch.email);
+      if (existing && existing.id !== userId) {
+        throw new ConflictException('Email already in use');
+      }
+    }
+
+    return this.usersService.updateUser(userId, patch);
+  }
+
+  /** Change the signed-in user's password after verifying their current one. */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException('New password must be at least 6 characters long');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'password'],
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.password) {
+      throw new BadRequestException('Password login is not enabled for this account');
+    }
+
+    const isValid = await bcrypt.compare(currentPassword ?? '', user.password);
+    if (!isValid) throw new UnauthorizedException('Current password is incorrect');
+
+    user.password = await this.hashPassword(newPassword);
+    await this.userRepository.save(user);
+    return { message: 'Password updated successfully' };
+  }
+
+  async disableUser(userId: string) {
+    const user = await this.usersService.findUserById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.disabled = true;
+    return this.userRepository.save(user);
+  }
+
+  async enableUser(userId: string) {
+    const user = await this.usersService.findUserById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.disabled = false;
+    return this.userRepository.save(user);
+  }
 
 
 }

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne } from 'typeorm';
 import { RestaurantUser } from '../../restaurant-user/entities/restaurantUser.entity';
 import { Courier } from '../../couriers/entities/courier.entity';
 import { UserAddress } from '../userAddress/entities/UserAddress.entity';
@@ -37,9 +37,6 @@ export class User {
   @Column({ default: 0 })
   failedLoginAttempts: number;
 
-  @Column({ default: false })
-  is_guest: boolean;
-
   @Column({ type: 'varchar', nullable: true })
   resetToken: string | null;
 
@@ -50,8 +47,8 @@ export class User {
   @OneToMany(() => RestaurantUser, (ru) => ru.user)
   restaurantLinks: RestaurantUser[];
 
-  @OneToMany(() => Courier, (courier) => courier.user)
-  courierProfiles: Courier[];
+  @OneToOne(() => Courier, (courier) => courier.user)
+  courierProfile: Courier;
 
   @OneToMany(() => UserAddress, (addr) => addr.user)
   addresses: UserAddress[];

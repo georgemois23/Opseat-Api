@@ -1,5 +1,6 @@
 import { UsersService } from '../users/users.service';
-import { Controller, Get, HttpCode, HttpStatus, NotImplementedException, Post, Request, UseGuards, Body, UnauthorizedException, Res, Query, Req } from "@nestjs/common";
+import { Controller, Get, HttpCode, HttpStatus, NotImplementedException, Patch, Post, Request, UseGuards, Body, UnauthorizedException, Res, Query, Req, Param } from "@nestjs/common";
+import { UpdateUserDTO } from '../users/user.dto';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from "./auth.service";
 import { PassportLocalGuard } from "./guards/passport-local.guard";
@@ -13,6 +14,9 @@ import { RestaurantUser } from 'src/restaurant-user/entities/restaurantUser.enti
 import { Repository } from 'typeorm';
 import { Public } from './decorators/public.decorator';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './guards/roles.decorator';
+import { Courier } from 'src/couriers/entities/courier.entity';
 
 
 @Controller('auth')
@@ -21,7 +25,8 @@ export class PassportAuthController {
     private authService: AuthService,
     private jwtService: JwtService, 
     private usersService: UsersService,
-    @InjectRepository(RestaurantUser) private RestaurantUserRepo: Repository<RestaurantUser>
+    @InjectRepository(RestaurantUser) private RestaurantUserRepo: Repository<RestaurantUser>,
+    @InjectRepository(Courier) private courierRepo: Repository<Courier>,
   ) {}
 
     @HttpCode(HttpStatus.OK)
@@ -91,15 +96,40 @@ async googleAuthRedirect(@Req() req, @Res() res: Response) {
 async getUserInfo(@Request() request) {
   const { password, ...userWithoutPassword } = request.user;
 
-  const isRestaurantUser = await this.RestaurantUserRepo.findOne({
+  const isRestaurantUser = await this.RestaurantUserRepo.find({
     where: { user: { id: request.user.id } },
   });
 
+  const isCourrierUser = await this.courierRepo.find({
+    where: { user: { id: request.user.id } },
+  });
+
+  const provider = await this.usersService.getLoginProvider(request.user.id);
+
   return {
     ...userWithoutPassword,
-    isRestaurantUser: !!isRestaurantUser,
+    isRestaurantUser: isRestaurantUser.length > 0,
+    RestaurantUserNumber: isRestaurantUser.length,
+    isCourrierUser: isCourrierUser.length > 0,
+    provider,
   };
 }
+    @UseGuards(AuthGuard)
+    @Patch('profile')
+    async updateProfile(@Request() req, @Body() body: UpdateUserDTO) {
+        return this.authService.updateProfile(req.user.id, body);
+    }
+
+    @UseGuards(AuthGuard)
+    @Post('change-password')
+    @HttpCode(HttpStatus.OK)
+    async changePassword(
+        @Request() req,
+        @Body() body: { currentPassword: string; newPassword: string },
+    ) {
+        return this.authService.changePassword(req.user.id, body.currentPassword, body.newPassword);
+    }
+
     @Public()
     @Post('signup')
     async signup(
@@ -200,5 +230,19 @@ async forgotPassword(
     return this.authService.verifyResetToken(token);
   }
 
+  
+  @Roles(UserRole.ADMIN)
+  @UseGuards(AuthGuard)
+  @Post('disable-user/:id')
+  async disableUser(@Param('id') userId: string) {
+    return this.authService.disableUser(userId);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @UseGuards(AuthGuard)
+  @Post('enable-user/:id')
+  async enableUser(@Param('id') userId: string) {
+    return this.authService.enableUser(userId);
+  }
 
 }

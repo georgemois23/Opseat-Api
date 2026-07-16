@@ -2,10 +2,11 @@ import { Restaurant } from "../../restaurants/entities/restaurant.entity";
 import { User } from "../../users/entities/users.entity";
 import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { OrderItem } from "./orderItem.entity";
+import { Courier } from "../../couriers/entities/courier.entity";
 
 export enum OrderStatus {
-  DRAFT = 'draft',        // cart
-  PENDING = 'pending',    // checkout pressed
+  DRAFT = 'draft',         
+  PENDING = 'pending',     
   ACCEPTED = 'accepted',
   PREPARING = 'preparing',
   READY = 'ready',
@@ -43,10 +44,13 @@ export class Order {
 
   @OneToMany(() => OrderItem, (item) => item.order, {
   cascade: true,
-  orphanRemoval: true, // <--- THIS IS THE KEY FIX
+  orphanRemoval: true,  
   onDelete: 'CASCADE',
-} as any)
-items: OrderItem[];
+  } as any)
+  items: OrderItem[];
+
+  @ManyToOne(() => Courier, { nullable: true }) 
+  courier?: Courier;
 
   @Column({
     type: 'enum',
@@ -54,12 +58,10 @@ items: OrderItem[];
     default: DeliveryType.DELIVERY
   })
   deliveryType: DeliveryType;
-
-  // We store the address as a string or a JSON object for historical accuracy
+ 
   @Column({ type: 'text', nullable: true })
   deliveryAddress: string;
-
-  // Optional: Coordinates are helpful for the countdown logic/map
+ 
   @Column({ type: 'float', nullable: true })
   deliveryLat: number;
 
@@ -67,7 +69,7 @@ items: OrderItem[];
   deliveryLng: number;
 
   @Column({ type: 'text', nullable: true })
-  deliveryNotes: string; // e.g., "Gate code is 1234"
+  deliveryNotes: string;  
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
